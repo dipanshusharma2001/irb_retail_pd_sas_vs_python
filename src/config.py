@@ -1,0 +1,23 @@
+# Core libraries
+import numpy as np
+import pandas as pd
+
+# Statistics & modelling
+import scipy.stats as stats
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+# Metrics
+from sklearn.metrics import roc_auc_score, roc_curve
+
+# Visualization
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Display options
+pd.set_option("display.max_columns", 200)
+pd.set_option("display.float_format", "{:.4f}".format)
+
+# Plot style
+sns.set_style("whitegrid")
+plt.rcParams["figure.figsize"] = (10, 6)

@@ -1,0 +1,11 @@
+# required libraries for the project
+
+numpy
+pandas
+scipy
+statsmodels
+scikit-learn
+matplotlib
+seaborn
+jupyter
+ipykernel

@@ -110,3 +110,12 @@ irb-retail-sas-vs-python/
 - This repository is not intended for production deployment
 - It is a learning and reference artifact
 - All modelling choices are simplified for clarity while remaining IRB-aligned
+
+## Author
+
+This project is maintained by **Dipanshu Sharma**.
+
+- **LinkedIn**: [Dipanshu Sharma](https://www.linkedin.com/in/dipanshu-sharma-523921176/)
+- **Email**: dipanshusharma.iitb@gmail.com
+- **Contact**: +91 9892894009
+

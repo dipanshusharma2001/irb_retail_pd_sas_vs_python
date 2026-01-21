@@ -14,6 +14,10 @@ from sklearn.metrics import roc_auc_score, roc_curve
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
+# main_directory
+main_dir = "/Users/sharmadipanshu/Developer/KPMG/irb_retail_pd_sas_vs_python/"
+
 # Display options
 pd.set_option("display.max_columns", 200)
 pd.set_option("display.float_format", "{:.4f}".format)

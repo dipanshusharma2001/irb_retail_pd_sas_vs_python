@@ -34,3 +34,22 @@ def save_as_pickle_if_not_exists_and_load(pickle_file_path):
     df.columns =   df.columns.str.lower().str.replace(' ', '_')
 
     return df
+
+
+def export_dict_to_excel(data_dict, file_path):
+    """
+    Export a dictionary of DataFrames to an Excel file, with each key as a sheet name.
+
+    Parameters:
+    data_dict (dict): A dictionary where keys are sheet names and values are DataFrames.
+    file_path (str): The path to save the Excel file.
+
+    Returns:
+    None
+    """
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+        for sheet_name, df in data_dict.items():
+            if not isinstance(df, pd.DataFrame):
+                raise ValueError(f"Value for sheet '{sheet_name}' is not a DataFrame")
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    print(f"Excel file saved at: {file_path}")

@@ -70,38 +70,25 @@ Retail-specific nuances (vs wholesale IRB) are explicitly highlighted, including
 
 ## Repository Structure
 
-```text
-irb-retail-sas-vs-python/
-│
-├── README.md
-│
-├── data/
-│   ├── raw/            # Original LendingClub dataset
-│   └── processed/      # Model-ready datasets
-│
-├── notebooks/
-│   ├── 00_retail_irb_orientation.ipynb
-│   ├── 01_lendingclub_data_setup.ipynb
-│   ├── 02_data_cleaning.ipynb
-│   ├── 03_binning_woe_iv.ipynb
-│   ├── 04_pd_model_logistic.ipynb
-│   ├── 05_validation_metrics.ipynb
-│   ├── 06_calibration.ipynb
-│   └── 07_stability_monitoring.ipynb
-│
-├── src/
-│   ├── data_utils.py
-│   ├── woe_utils.py
-│   ├── metrics.py
-│   ├── calibration.py
-│   └── stability.py
-│
-├── figures/
-│   └── Saved plots for reporting and PPT use
-│
-├── requirements.txt
-└── .gitignore
-```
+This repository is organized as follows:
+
+### Notebooks
+- **01_data_preparation_and_eda.ipynb**: Data ingestion, exploratory data analysis (EDA), and basic portfolio checks.
+- **02_feature_engineering_binning_woe.ipynb**: Feature engineering, binning, and Weight of Evidence (WOE) transformations.
+- **03_pd_model_development.ipynb**: Development of Probability of Default (PD) models using logistic regression.
+- **04_model_validation_and_calibration.ipynb**: Model validation, calibration, and performance assessment.
+- **05_model_stability_and_monitoring.ipynb**: Stability analysis and ongoing model monitoring.
+
+### Folders
+- **data/**: Contains raw and processed datasets.
+  - `raw/`: Raw input data.
+  - `processed/`: Processed datasets used for modelling.
+- **summaries_and_charts/**: Stores generated plots, summaries, and visualizations.
+
+### Source Code Updates
+- **src/**: Contains Python scripts for various tasks.
+  - `utility_functions.py`: Helper Functions for the project.
+  - `config.py`: Configuration settings for the project.
 
 ---
 

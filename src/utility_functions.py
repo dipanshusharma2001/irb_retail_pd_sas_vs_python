@@ -53,3 +53,30 @@ def export_dict_to_excel(data_dict, file_path):
                 raise ValueError(f"Value for sheet '{sheet_name}' is not a DataFrame")
             df.to_excel(writer, sheet_name=sheet_name, index=False)
     print(f"Excel file saved at: {file_path}")
+
+
+def WOE(df, feature, target):
+    """
+    Function to calculate Weight of Evidence (WOE) for a given feature.
+    """
+    df.reset_index(inplace=True, drop=True)
+    temp = df[[feature, target]].copy()
+    
+    # filling missing as 'missing'
+    temp[feature] = temp[feature].fillna('missing')
+    
+    temp = temp.groupby(feature).agg({target: ['count', 'sum']})
+    temp.reset_index(inplace=True)
+
+    result = pd.DataFrame()
+    result[feature] = temp[feature]
+    result['pop'] = temp[(target, 'count')]
+    result['def'] = temp[(target, 'sum')]
+    result['nondef'] = result['pop'] - result['def']
+    result['def_rate'] = result['def'] / result['pop']
+    result['perc_def'] = result['def'] / result['def'].sum()
+    result['perc_nondef'] = result['nondef'] / result['nondef'].sum()
+    result['woe'] = np.where((result['perc_def'] != 0) & (result['perc_nondef'] != 0), np.log(result['perc_nondef'] / result['perc_def']), np.nan)
+    result['iv'] = np.where(result['woe'] != np.nan, (result['perc_nondef'] - result['perc_def']) * result['woe'], np.nan)
+
+    return result

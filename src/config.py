@@ -17,6 +17,7 @@ import scipy.stats as stats
 import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from sklearn.isotonic import IsotonicRegression
+from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
 
 # Metrics
 from sklearn.metrics import roc_auc_score, roc_curve

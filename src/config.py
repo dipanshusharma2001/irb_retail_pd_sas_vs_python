@@ -5,6 +5,10 @@ import typing
 import math
 import datetime
 import pickle
+import joblib
+from joblib import Parallel, delayed
+from itertools import combinations, permutations, product
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -18,6 +22,9 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+
 
 # Metrics
 from sklearn.metrics import roc_auc_score, roc_curve

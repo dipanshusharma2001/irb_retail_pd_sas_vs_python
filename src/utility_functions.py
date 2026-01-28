@@ -55,6 +55,7 @@ def export_dict_to_excel(data_dict, file_path):
     print(f"Excel file saved at: {file_path}")
 
 
+# SFA functions
 def WOE(df, feature, target)->pd.DataFrame:
     """
     Function to calculate Weight of Evidence (WOE) for a given feature.
@@ -122,3 +123,81 @@ def MonotonicBinning(data: pd.DataFrame, x: str, y: str, n_bins: int = 5) -> pd.
 
     return temp
 
+
+# MFA functions
+def violates_exclusion(combo, excluded_pairs)-> bool:
+    combo = set(combo)
+    for a, b in excluded_pairs:
+        if a in combo and b in combo:
+            return True
+    return False
+
+def violates_categories(combo, num_vars, cat_vars)-> bool:
+
+    # variable type constraint
+    n_num = sum(v in num_vars for v in combo)
+    n_cat = sum(v in cat_vars for v in combo)
+
+    if (n_num < 2 or n_cat < 2):
+        return True
+    
+    return False
+
+def compute_vif(X)-> pd.DataFrame:
+    vif_df = pd.DataFrame()
+    vif_df['variable'] = X.columns
+    vif_df['vif'] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+    return vif_df
+
+
+def run_mfa_combination(model_df, vars_list):
+
+    # FORCE local writable copies
+    X = sm.add_constant(model_df[vars_list]).copy()
+    y = model_df['default_flag'].copy()
+
+    try:
+        model = sm.Logit(y, X).fit(disp=0)
+    except:
+        return pd.DataFrame()
+
+    coef = model.params[vars_list]
+    pvals = model.pvalues[vars_list]
+
+    vif_df = compute_vif(X[vars_list])
+    max_vif = vif_df['vif'].max()
+
+    # FORCE writable prediction array
+    y_pred = model.predict(X).copy()
+    gini = 2 * roc_auc_score(y, y_pred) - 1
+
+    corr = model_df[vars_list].corrwith(y)
+    sign_check = np.all(np.sign(coef.values) == np.sign(corr.values))
+
+    max_pval = pvals.max()
+
+    if (max_pval < 0.05) and (max_vif < 2.5) and sign_check:
+
+        # ---- contribution calculation ----
+        stds = model_df[vars_list].std()
+        abs_contrib = (coef.abs() * stds)
+        contrib_pct = abs_contrib / abs_contrib.sum()
+
+        result = pd.DataFrame({
+            'variable': vars_list,
+            'coefficients': coef.values,
+            'p_values': pvals.values,
+            'contribution_pct': contrib_pct.values
+        })
+
+        result = result.merge(vif_df, on='variable', how='left')
+        result['max_pval'] = max_pval
+        result['max_vif'] = max_vif
+        result['gini'] = gini
+        result['sign_check'] = sign_check
+        result['min_contribution'] = contrib_pct.min()
+        result['max_contribution'] = contrib_pct.max()
+
+        return result
+
+    return pd.DataFrame()

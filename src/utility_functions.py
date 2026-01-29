@@ -250,3 +250,14 @@ def performance_summary(df: pd.DataFrame, pd_col: str, target_col: str, bins: in
     plt.show()
 
     return (decile_summary, decile_fig, auc, gini, ks_stat)
+
+def stability_index(expected, actual):
+    exp_dist = expected.value_counts(normalize=True)
+    act_dist = actual.value_counts(normalize=True)
+
+    all_levels = exp_dist.index.union(act_dist.index)
+    exp_dist = exp_dist.reindex(all_levels, fill_value=1e-6)
+    act_dist = act_dist.reindex(all_levels, fill_value=1e-6)
+
+    si = ((act_dist - exp_dist) * np.log(act_dist / exp_dist)).sum()
+    return si

@@ -77,7 +77,6 @@ This repository is organized as follows:
 - **02_feature_engineering_binning_woe.ipynb**: Feature engineering, binning, and Weight of Evidence (WOE) transformations.
 - **03_pd_model_development.ipynb**: Development of Probability of Default (PD) models using logistic regression.
 - **04_model_validation_and_calibration.ipynb**: Model validation, calibration, and performance assessment.
-- **05_model_stability_and_monitoring.ipynb**: Stability analysis and ongoing model monitoring.
 
 ### Folders
 - **data/**: Contains raw and processed datasets.

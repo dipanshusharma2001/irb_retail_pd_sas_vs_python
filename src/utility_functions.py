@@ -201,3 +201,52 @@ def run_mfa_combination(model_df, vars_list):
         return result
 
     return pd.DataFrame()
+
+
+# calibration and validation functions
+
+# score function
+def score_pd(df, betas, intercept):
+    xb = intercept
+    for v in betas.index:
+        xb += df[v] * betas[v]
+    return 1 / (1 + np.exp(-xb))
+
+
+def performance_summary(df: pd.DataFrame, pd_col: str, target_col: str, bins: int)->tuple:
+    
+    y = df[target_col]
+    y_pred = df[pd_col]
+
+    # AUC & Gini
+    auc = roc_auc_score(y, y_pred)
+    gini = 2 * auc - 1
+
+    # KS Statistic
+    fpr, tpr, _ = roc_curve(y, y_pred)
+    ks_stat = np.max(tpr - fpr)
+
+    # Decile summary
+    temp = df[[target_col, pd_col]].copy()
+    temp['decile'] = pd.qcut(temp[pd_col], q=bins, labels=False, duplicates='drop')
+
+    decile_summary = temp.groupby('decile').agg(population=(target_col, 'count'), defaults=(target_col, 'sum'), avg_pd=(pd_col, 'mean')).reset_index()
+    decile_summary['obs_default_rate'] = (decile_summary['defaults'] / decile_summary['population'])
+    decile_summary = decile_summary.sort_values('decile').reset_index(drop=True)
+
+    # KS by decile (optional diagnostic)
+    decile_summary['cum_good'] = ((decile_summary['population'] - decile_summary['defaults']).cumsum() / (decile_summary['population'] - decile_summary['defaults']).sum())
+    decile_summary['cum_bad'] = (decile_summary['defaults'].cumsum() / decile_summary['defaults'].sum())
+    decile_summary['ks'] = abs(decile_summary['cum_bad'] - decile_summary['cum_good'])
+
+    # Plot
+    decile_fig = plt.figure(figsize=(10, 6))
+    sns.barplot(x='decile', y='obs_default_rate', data=decile_summary, color='skyblue', label='Observed Default Rate')
+    sns.lineplot(x='decile', y='avg_pd', data=decile_summary, color='orange', marker='o', label='Average Predicted PD')
+    plt.title('Decile-wise Observed Default Rate vs Average Predicted PD')
+    plt.xlabel('Decile')
+    plt.ylabel('Rate')
+    plt.legend()
+    plt.show()
+
+    return (decile_summary, decile_fig, auc, gini, ks_stat)

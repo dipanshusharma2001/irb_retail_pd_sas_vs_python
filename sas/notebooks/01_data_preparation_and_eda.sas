@@ -1,5 +1,5 @@
 /*============================================================*/
-/* Notebook: 01_data_preparation.sas                          */
+/* Notebook: 01_data_preparation_and_eda.sas                          */
 /* Purpose : Data preparation & initial EDA                  */
 /*============================================================*/
 

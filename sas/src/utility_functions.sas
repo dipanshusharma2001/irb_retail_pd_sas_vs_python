@@ -15,15 +15,26 @@
 /*---------------- WOE Calculation ----------------*/
 %macro calc_woe(data=, feature=, target=, out=);
 
+data _woe_input;
+    set &data.;
+    length _bin $30;
+
+    if vtype(&feature.) = 'N' then
+        _bin = strip(put(&feature., best.));
+    else
+        _bin = strip(&feature.);
+run;
+
 proc sql;
     create table _woe_base as
     select
-        coalesce(put(&feature., $50.), 'missing') as bin,
+        coalesce(_bin, 'missing') as bin,
         count(*) as pop,
         sum(&target.) as def
-    from &data.
+    from _woe_input
     group by calculated bin;
 quit;
+
 
 data &out.;
     set _woe_base;
@@ -186,16 +197,16 @@ run;
 
 %mend clubbed_categorical_woe;
 
-*WOE Function for Numerical Variables;
+*WOE for Numerical Continuous Variables;
 %macro calc_woe_numeric(data=, feature=, target=, out=);
 
-    data _woe_input;
+    data _woe_input2 / view=_woe_input2;
         set &data.;
-        length &feature._chr $50;
+        length &feature._chr $30;
         &feature._chr = strip(put(&feature., best.));
     run;
 
-    %calc_woe(data=_woe_input, feature=&feature._chr, target=&target., out=&out.);
+    %calc_woe(data=_woe_input2, feature=&feature._chr, target=&target., out=&out.);
 
     data &out.;
         set &out.;
@@ -204,38 +215,47 @@ run;
 
 %mend calc_woe_numeric;
 
-
-* WOE for Numerical Continuous Variables;
-%macro continuous_woe(var=, bins=);
-
-    data work.&var._missing work.&var._not_missing;
-        set work.model_df_after_eda;
-
-        if missing(&var.) then do;
-            &var._bin_id = -1;
-            output work.&var._missing;
-        end;
-        else output work.&var._not_missing;
-    run;
-
-    proc rank data=work.&var._not_missing groups=&bins. out=work.&var._ranked;
+%macro continuous_woe(var=, bins=, target_var=);
+    proc rank
+        data=work.model_df_after_eda(where=(not missing(&var.)))
+        groups=&bins.
+        out=work.&var._ranked(keep=row_id &var._bin_id);
         var &var.;
         ranks &var._bin_id;
     run;
 
-    data work.model_df_after_eda; set work.&var._missing work.&var._ranked; run;
+    data work.&var._missing;
+        set work.model_df_after_eda(keep=row_id &var.);
+        where missing(&var.);
+        &var._bin_id = -1;
+    run;
+
+    data work.&var._bins;
+        set work.&var._ranked work.&var._missing;
+    run;
+
+    proc sql;
+        create table work.model_df_after_eda as
+        select
+            a.*,
+            b.&var._bin_id
+        from work.model_df_after_eda a
+        left join work.&var._bins b
+            on a.row_id = b.row_id;
+    quit;
 
     ods listing gpath="&main_dir./sas/summaries_and_charts";
     ods graphics / reset imagename="woe_&var.";
+
     %calc_woe_numeric(data=work.model_df_after_eda, feature=&var._bin_id, target=&target_var., out=out.woe_&var.);
 
     proc sgplot data=out.woe_&var.;
-        vbar bin / response=woe datalabel;
+        vbar bin_num / response=woe datalabel;
         yaxis label="Weight of Evidence" grid;
         xaxis label="&var._bin_id";
         title "WOE – &var.";
     run;
-    
+
     proc sql;
     create table work.model_df_after_eda as
     select
@@ -245,15 +265,15 @@ run;
     left join out.woe_&var. b
         on a.&var._bin_id = b.bin_num;
 	quit;
-
+	
 %mend continuous_woe;
 
 
-%macro continuous_woe_clubbed(var=);
+%macro continuous_woe_clubbed(var=, target_var=);
 
     ods listing gpath="&main_dir./sas/summaries_and_charts";
     ods graphics / reset imagename="woe_clubbed_&var.";
-    %calc_woe_numeric(data=work.model_df_after_eda, feature=&var._bin_id_adj, target=&target_var., out=out.woe_clubbed_&var.);
+    %calc_woe(data=work.model_df_after_eda, feature=&var._bin_id_adj, target=&target_var., out=out.woe_clubbed_&var.);
 
     proc sgplot data=out.woe_clubbed_&var.;
         vbar bin / response=woe datalabel;
@@ -266,10 +286,10 @@ run;
     create table work.model_df_after_eda as
     select
         a.*,
-        b.woe as &var._woe
+        b.woe as &var._woe2
     from work.model_df_after_eda a
     left join out.woe_clubbed_&var. b
-        on a.&var._bin_id_adj = b.bin_num;
+        on strip(put(a.&var._bin_id_adj, 30.)) = b.bin;
 	quit;
 
-%mend continuous_woe;
+%mend continuous_woe_clubbed;

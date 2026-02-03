@@ -82,6 +82,9 @@ Monotonicity is not conceptually required for these variables.;
 *Clubbing Categorical Variables;
 data work.model_df_after_eda;
     set work.model_df_after_eda;
+    length clubbed_sub_grade $50. clubbed_term $50. 
+           clubbed_purpose $50. clubbed_verification_status $50.
+           clubbed_home_ownership $50. clubbed_emp_length $50.;
 
     * 1. Clubbed Term (no change, explicit copy);
     clubbed_term = term;

@@ -4,6 +4,8 @@
 /*============================================================*/
 
 /*---------------- Include Config & Utilities ----------------*/
+%let main_dir = /home/u64435593/sasuser.v94/projects;
+
 %include "&main_dir./sas/src/config.sas";
 %include "&main_dir./sas/src/utility_functions.sas";
 %put &=main_dir;
@@ -420,22 +422,3 @@ data process.model_df_after_eda;
             loan_status
     );
 run;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

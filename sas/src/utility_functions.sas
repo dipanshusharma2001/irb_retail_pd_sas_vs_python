@@ -293,3 +293,106 @@ run;
 	quit;
 
 %mend continuous_woe_clubbed;
+
+
+*Single Factor Analysis;
+%macro sfa_single(var=);
+
+    /*---------------- Logistic Regression ----------------*/
+    ods exclude all;
+    ods output ParameterEstimates = _pe Association = _assoc;
+    proc logistic data=data_after_woe descending;
+        model default_flag = &var.;
+    run;
+    
+    ods select all;
+
+    /*---------------- coefficients, p_value, auc, gini---------*/
+    proc sql;
+    	select put(Estimate, best32.), put(ProbChiSq, best32.)
+    	into :coef trimmed, :pval trimmed from _pe
+    	where Variable = "&var.";
+    quit;
+  
+    proc sql; select nValue2 into :gini from _assoc where Label2 = "Somers' D"; quit;
+
+    %let sign_coef = %sysevalf(%sysfunc(sign(&coef.)));
+
+    /*---------------- Correlation ----------------*/
+    ods exclude all;
+    ods output PearsonCorr = _corr;
+
+    proc corr data=data_after_woe pearson; var &var.; with default_flag; run;
+    
+    ods select all;
+    proc sql; select &var. into :corr from _corr where variable = "default_flag"; quit;
+
+    %let sign_corr = %sysevalf(%sysfunc(sign(&corr.)));
+
+    /*---------------- Append results ----------------*/
+    data _sfa_row;
+    length variable $50;
+    variable    = "&var.";
+    coefficient = &coef.;
+    p_value     = &pval.;
+    sign        = &sign_coef.;
+    gini        = &gini.;
+    corr        = &corr.;
+    sign_corr   = &sign_corr.;
+	run;
+
+	proc append base=work.sfa_results data=_sfa_row force;
+run;
+
+
+%mend sfa_single;
+
+%macro run_sfa(varlist);
+
+    %local i var n;
+    %let n = %sysfunc(countw(&varlist.));
+
+    %do i = 1 %to &n.;
+        %let var = %scan(&varlist., &i.);
+        %sfa_single(var=&var.);
+    %end;
+
+%mend run_sfa;
+
+
+
+*Multi Factor Ananalysis;
+
+data work.economic_driver_map;
+    length variable $20 economic_driver $20;
+
+    /* credit quality */
+    variable='subgr_w'; economic_driver='credit_quality'; output;
+    variable='rate_w';  economic_driver='credit_quality'; output;
+
+    /* behavioural */
+    variable='delinq_w'; economic_driver='behavioural'; output;
+    variable='inq_w';    economic_driver='behavioural'; output;
+    variable='pubrec_w'; economic_driver='behavioural'; output;
+    variable='open_w';   economic_driver='behavioural'; output;
+    variable='totacc_w'; economic_driver='behavioural'; output;
+    variable='rutil_w';  economic_driver='behavioural'; output;
+    variable='rbal_w';   economic_driver='behavioural'; output;
+
+    /* affordability */
+    variable='inc_w';  economic_driver='affordability'; output;
+    variable='dti_w';  economic_driver='affordability'; output;
+    variable='inst_w'; economic_driver='affordability'; output;
+
+    /* exposure */
+    variable='loan_w'; economic_driver='exposure'; output;
+    variable='term_w'; economic_driver='exposure'; output;
+
+    /* customer profile */
+    variable='home_w'; economic_driver='customer_profile'; output;
+    variable='empl_w'; economic_driver='customer_profile'; output;
+    variable='ver_w';  economic_driver='customer_profile'; output;
+    variable='purp_w'; economic_driver='customer_profile'; output;
+run;
+
+

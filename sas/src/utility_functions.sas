@@ -396,3 +396,68 @@ data work.economic_driver_map;
 run;
 
 
+%macro run_mfa(combo=, model_id=);
+
+    %let varlist = &combo.;
+
+    /* Logistic */
+    ods exclude all;
+    ods output ParameterEstimates=_pe Association=_assoc;
+    proc logistic data=data_after_woe descending;
+        model default_flag = &varlist.;
+        output out=_pred p=prob;
+    run;
+    
+    *gini, vif, percentage contrbution;
+    ods select all;
+    proc sql; select nValue2 into :gini from _assoc where Label2 = "Somers' D"; quit;
+
+    ods exclude all;
+    ods output ParameterEstimates=_vif;
+    proc reg data=data_after_woe;
+        model default_flag = &varlist. / vif;
+    run;
+    quit;
+    
+    ods select all;
+    proc means data=data_after_woe ; var &varlist.; output out=_std std=; run;
+    proc transpose data=_std out=_std_long(rename=(col1=std)); var &varlist.; run;
+    
+    *Cleaning coefficient and vif dataset;
+    data _coef;
+        set _pe(rename=(Variable=variable Estimate=coefficient ProbChiSq=p_value));
+        if variable ne "Intercept";
+        gini = &gini.;
+    run;
+
+    data _vif2;
+        set _vif(rename=(Variable=variable VarianceInflation=vif));
+    run;
+
+    proc sql;
+        create table _result as
+        select &model_id. as model_id,
+        	   a.variable,
+               a.coefficient,
+               a.p_value,
+               b.vif,
+               c.std,
+               abs(a.coefficient * c.std) as abs_contrib,
+               a.gini,
+               d.economic_driver
+        from _coef a
+        left join _vif2 b
+            on a.variable = b.variable
+        left join _std_long c
+            on a.variable = c._NAME_
+        left join work.economic_driver_map d
+            on a.variable = d.variable;
+    quit;
+
+    proc append base=work.mfa_results data=_result force;
+    run;
+
+%mend;
+
+
+

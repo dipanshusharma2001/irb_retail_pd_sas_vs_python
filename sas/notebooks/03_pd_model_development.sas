@@ -179,110 +179,288 @@ data work.mfa_results;
     stop;
 run;
 
-%macro run_mfa(combo=, model_id=);
+* TODO: figure out the proc iml error, grid search implemented using do loop for now, will fix the iml later.;
+/* proc iml; */
+/*     varNames = {"inc_w" "inq_w" "subgr_w" "ver_w" "home_w" "dti_w"}; */
+/*     n = ncol(varNames); */
+/*     model_id = .; */
+/*     combo = ""; */
+/*      */
+/*     create work.combinations var {"model_id" "combo"}; */
+/*     char combo $ 200; /* Define the length of the character variable */
+/*     id = 0; */
+/*      */
+/*     do k = 4 to 6; */
+/*         combIdx = allcomb(n, k); */
+/*          */
+/*         do i = 1 to nrow(combIdx); */
+/*             id = id + 1; */
+/*             model_id = id; */
+/*             comboVars = varNames[combIdx[i,]]; */
+/*             combo = comboVars[1]; */
+/*             do j = 2 to k; */
+/*                 combo = trim(combo) || " " || trim(comboVars[j]); */
+/*             end; */
+/*             append; */
+/*         end; */
+/*     end; */
+/*     close work.combinations; */
+/* quit; */
 
-    %let varlist = &combo.;
 
-    /* Logistic */
-    ods exclude all;
-    ods output ParameterEstimates=_pe Association=_assoc;
-    proc logistic data=data_after_woe descending;
-        model default_flag = &varlist.;
-        output out=_pred p=prob;
-    run;
-    
-    *gini, vif, percentage contrbution;
-    ods select all;
-    proc sql; select nValue2 into :gini from _assoc where Label2 = "Somers' D"; quit;
+data work.combinations;
+    length combo $200 model_id 8;
+    array vars[6] $32 _temporary_
+        ("inc_w" "inq_w" "subgr_w" "ver_w" "home_w" "dti_w");
 
-    ods exclude all;
-    ods output ParameterEstimates=_vif;
-    proc reg data=data_after_woe;
-        model default_flag = &varlist. / vif;
-    run;
-    quit;
-    
-    ods select all;
-    proc means data=data_after_woe ; var &varlist.; output out=_std std=; run;
-    proc transpose data=_std out=_std_long(rename=(col1=std)); var &varlist.; run;
-    
-    *Cleaning coefficient and vif dataset;
-    data _coef;
-        set _pe(rename=(Variable=variable Estimate=coefficient ProbChiSq=p_value));
-        if variable ne "Intercept";
-        gini = &gini.;
-    run;
-
-    data _vif2;
-        set _vif(rename=(Variable=variable VarianceInflation=vif));
-    run;
-
-    proc sql;
-        create table _result as
-        select "&model_id." as model_id,
-        	   a.variable,
-               a.coefficient,
-               a.p_value,
-               b.vif,
-               c.std,
-               abs(a.coefficient * c.std) as abs_contrib,
-               a.gini,
-               d.economic_driver
-        from _coef a
-        left join _vif2 b
-            on a.variable = b.variable
-        left join _std_long c
-            on a.variable = c._NAME_
-        left join work.economic_driver_map d
-            on a.variable = d.variable;
-    quit;
-
-    proc append base=work.mfa_results data=_result force;
-    run;
-
-%mend;
-
-proc iml;
-    varNames = {"inc_w" "inq_w" "subgr_w" "ver_w" "home_w" "dti_w"};
-    n = ncol(varNames);
-
-    model_id = .;
-    combo = ""; /* Initialize combo as an empty string */
-
-    /* Create the dataset with the correct variable names and define combo as a character variable */
-    create work.combinations var {"model_id" "combo"};
-    char combo $ 200; /* Define the length of the character variable */
-
-    id = 0;
-
-    do k = 4 to 6;
-        combIdx = allcomb(n, k); /* Generate all combinations of size k */
-
-        do i = 1 to nrow(combIdx);
-            id = id + 1;
-            model_id = id;
-
-            /* Extract the variable names for the current combination */
-            comboVars = varNames[combIdx[i,]];
-
-            /* Concatenate the variable names into a single string */
-            combo = comboVars[1];
-            do j = 2 to k;
-                combo = trim(combo) || " " || trim(comboVars[j]);
+    model_id = 0;
+    /* k = 4 */
+    do i1 = 1 to 3;
+        do i2 = i1+1 to 4;
+            do i3 = i2+1 to 5;
+                do i4 = i3+1 to 6;
+                    model_id + 1;
+                    combo = catx(" ", vars[i1], vars[i2], vars[i3], vars[i4]);
+                    output;
+                end;
             end;
-
-            append; /* Append the current model_id and combo to the dataset */
         end;
     end;
 
-    close work.combinations;
+    /* k = 5 */
+    do i1 = 1 to 2;
+        do i2 = i1+1 to 3;
+            do i3 = i2+1 to 4;
+                do i4 = i3+1 to 5;
+                    do i5 = i4+1 to 6;
+                        model_id + 1;
+                        combo = catx(" ", vars[i1], vars[i2], vars[i3], vars[i4], vars[i5]);
+                        output;
+                    end;
+                end;
+            end;
+        end;
+    end;
+    /* k = 6 */
+    model_id + 1;
+    combo = catx(" ", of vars[*]);
+    output;
+    drop i1-i6;
+run;
+
+data _null_;
+    set work.combinations;
+    call execute(
+        '%run_mfa(combo=' || strip(combo) ||
+        ', model_id=' || strip(put(model_id,8.)) || ');'
+    );
+run;
+
+proc sort data= work.mfa_results out= out.mfa_results;
+by gini;
+run;
+
+* combination 22 performs the best, similar to what we have observed in python. 
+
+The selected six variables jointly achieve:
+
+- Strong discriminatory power (Gini ≈ 40.7%),
+- Statistical robustness (all coefficients significant at <1%),
+- Low multicollinearity (all VIFs ≈ 1.0–1.2),
+- Stable and intuitive contribution structure, avoiding over-concentration in a single driver.
+
+The final model captures diverse and complementary risk dimensions, ensuring no single economic theme dominates the scorecard.
+
+-- clubbed_sub_grade_woe
+	--- Primary credit quality indicator
+	--- Largest contributor (~56%), reflecting underwriting risk differentiation
+
+-- clubbed_verification_status_woe
+	--- ustomer profile / documentation strength
+	---Captures selection effects and information asymmetry
+
+-- clubbed_inq_last_6mths_woe
+	--- Recent behavioural stress indicator
+	--- Adds incremental risk sensitivity beyond static profile variables
+
+-- annual_inc_woe
+	--- Affordability / repayment capacity
+	--- Stabilises credit quality dominance
+
+-- clubbed_home_ownership_woe
+	--- Socio-economic stability proxy
+	--- Lowers volatility and improves interpretability
+
+-- dti_woe
+	--- Leverage stress measure`
+	--- Complements income by capturing obligations burden;
+
+*In Sample Summary Statistics;
+
+data out.final_selected_model;
+set out.mfa_results;
+if model_id = 22;
+run;
+
+*final gini, auc and KS statistic;
+proc sql noprint;
+    select distinct gini into :final_gini
+    from out.mfa_results
+    where model_id = 22;
 quit;
 
+%let final_auc = %sysevalf((&final_gini + 1)/2);
+
+%put NOTE: Final Model Gini = %sysevalf(&final_gini*100, floor).%;
+%put NOTE: Final Model AUC  = %sysevalf(&final_auc*100, floor).%;
+
+
+* scoring the dataset with finally selected model;
+proc logistic data=data_after_woe descending;
+    model default_flag = inc_w inq_w subgr_w ver_w home_w dti_w;
+    output out=work.model_scored p=pd_hat;
+run;
+
+* Decile Summary - movement of observed default rate and pd across bins;
+proc rank data=work.model_scored
+          groups=10
+          descending
+          out=work.model_scored;
+    var pd_hat;
+    ranks decile;
+run;
+
+data process.model_scored;
+    set work.model_scored;
+    decile = decile + 1;
+run;
+
+proc sql;
+    create table work.decile_summary as
+    select 
+        decile,
+        count(*) as population,
+        sum(default_flag) as defaults,
+        mean(pd_hat) as avg_pd
+    from process.model_scored
+    group by decile
+    order by decile;
+quit;
+
+data work.decile_summary;
+    set work.decile_summary;
+    obs_default_rate = defaults / population;
+run;
+
+
+data work.decile_summary;
+    set work.decile_summary;
+    goods = population - defaults;
+run;
+
+proc sql noprint;
+    select sum(goods), sum(defaults)
+    into :total_goods, :total_bads
+    from work.decile_summary;
+quit;
+
+data out.decile_summary;
+    set work.decile_summary;
+
+    retain cum_good cum_bad 0;
+
+    cum_good + goods;
+    cum_bad  + defaults;
+
+    cum_good_pct = cum_good / &total_goods.;
+    cum_bad_pct  = cum_bad  / &total_bads.;
+
+    ks = abs(cum_bad_pct - cum_good_pct);
+run;
+
+proc sql;
+    select max(ks) as KS_Statistic format=8.4
+    from work.decile_summary;
+quit;
+
+ods graphics / reset imagename="decile_summary_final_model";
+ods listing gpath="&main_dir./sas/summaries_and_charts";
+
+proc sgplot data=work.decile_summary;
+    vbarparm category=decile response=obs_default_rate /
+        datalabel
+        fillattrs=(color=lightblue);
+
+    series x=decile y=avg_pd /
+        markers
+        lineattrs=(color=orange thickness=2);
+
+    yaxis label="Rate";
+    xaxis label="Decile";
+    title "Decile-wise Observed Default Rate vs Average Predicted PD";
+run;
+
+
+*
+- The final six-factor PD model demonstrates strong discriminatory power and stable risk ranking across the portfolio. The model achieves an AUC of 
+  70.34% and a corresponding Gini coefficient of 40.68%. These results confirm that the selected variable set provides meaningful separation between 
+  defaulting and non-defaulting accounts while maintaining economic interpretability and modelling discipline.
+
+- Decile analysis further validates the robustness of the model. Observed default rates increase monotonically across all ten score deciles, ranging from 
+  approximately 2% in the lowest-risk decile to nearly 29% in the highest-risk decile. The average predicted PD closely tracks observed default behaviour 
+  at each decile level, indicating strong relative calibration even prior to formal calibration adjustments. This confirms that the model effectively ranks 
+  borrowers by risk and is suitable for downstream applications such as risk segmentation and policy cut-offs.
+
+- The KS statistic of ~29% indicates good separation between cumulative good and bad distributions. While marginal improvements in Gini are observed when 
+  additional variables are introduced, these gains are economically insignificant relative to the added complexity. The six-factor specification therefore 
+  represents an optimal balance between predictive power, stability, and interpretability, making it well-suited for regulatory and production use.
+
+
+Key Takeaways
+
+-- Strong discriminatory power (Gini ≈ 41%) with stable rank ordering
+-- Monotonic increase in observed default rates across score deciles
+-- Predicted PDs closely aligned with observed behaviour
+-- No evidence of overfitting or unstable segmentation
+-- Model is fit for calibration and validation in subsequent steps;
 
 
 
 
 
-%run_mfa(combo=&final_candidate_vars, model_id = 1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

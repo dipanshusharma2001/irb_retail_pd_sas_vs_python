@@ -115,3 +115,15 @@ run;
 data process.model_df_after_eda;
 set work.model_df_after_eda;
 run;
+
+
+
+
+
+
+
+
+
+
+
+

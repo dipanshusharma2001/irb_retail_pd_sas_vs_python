@@ -380,13 +380,13 @@ run;
 
 proc sql;
     select max(ks) as KS_Statistic format=8.4
-    from work.decile_summary;
+    from out.decile_summary;
 quit;
 
 ods graphics / reset imagename="decile_summary_final_model";
 ods listing gpath="&main_dir./sas/summaries_and_charts";
 
-proc sgplot data=work.decile_summary;
+proc sgplot data=out.decile_summary;
     vbarparm category=decile response=obs_default_rate /
         datalabel
         fillattrs=(color=lightblue);

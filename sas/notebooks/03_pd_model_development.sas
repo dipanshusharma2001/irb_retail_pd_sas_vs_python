@@ -296,12 +296,6 @@ The final model captures diverse and complementary risk dimensions, ensuring no 
 	--- Complements income by capturing obligations burden;
 
 *In Sample Summary Statistics;
-
-data out.final_selected_model;
-set out.mfa_results;
-if model_id = 22;
-run;
-
 *final gini, auc and KS statistic;
 proc sql noprint;
     select distinct gini into :final_gini

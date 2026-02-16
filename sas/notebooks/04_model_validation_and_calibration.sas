@@ -18,11 +18,28 @@ set process.model_scored;
 year = year(t0);
 run;
 
-data final_selected_model;
-set out.final_selected_model;
+proc contents data=scored_data; run;
+
+
+*final selected model;
+data out.final_selected_model;
+set out.mfa_results;
+if model_id = 22;
 run;
 
-proc contents data=scored_data; run;
+* there is no intercept in it, lets run the logistic again to populate intercept for future scoring;
+proc logistic data=scored_data descending;
+    model default_flag = dti_w home_w inc_w inq_w subgr_w ver_w;
+    ods output ParameterEstimates=final_pe;
+run;
+
+proc sql noprint; select Estimate into :intercept from final_pe where Variable = "Intercept"; quit;
+data betas;
+    set final_pe;
+    where Variable ne "Intercept";
+    keep Variable Estimate;
+    rename Variable=variable Estimate=coefficient;
+run;
 
 /* ================================= Calibration and Validation Sample (OOT) ============================== */
 
@@ -78,8 +95,144 @@ sample to estimate the Long-Run Average Default Rate (LRADR) and perform portfol
 depth to smooth short-term volatility while remaining representative of recent credit conditions. The 2018 vintage, comprising 
 approximately 495,000 observations, is designated as the out-of-time (OOT) validation sample. Although the model was developed using the 
 full snapshot of data, this split enables a pseudo-OOT assessment of rank-order stability, calibration behaviour, and score distribution 
-consistency across time, thereby supporting the evaluation of model robustness and fitness for use.;
+consistency across time, thereby supporting the evaluation of model robustness and fitness for use;
 
+*LRADR Trend;
+ods graphics / reset imagename="5_yearwise_default_rate_trend";
+ods listing gpath="&main_dir./sas/summaries_and_charts";
 
+proc sgplot data=out.yearwise_default_rate;
+    series x=year y=default_rate / markers;
+    series x=year y=five_year_lradr / markers;
+    yaxis label="Default Rate";
+    title "Year-wise Default Rate & 5-Year LRADR";
+run;
 
+data calib_data oot_data;
+    set scored_data;
+    if 2013 <= year <= 2017 then output calib_data;
+    else if year = 2018 then output oot_data;
+run;
+
+*LRADR and Calibration;
+proc sql noprint;
+    select variable, coefficient
+    into :var1-:var999, :beta1-:beta999
+    from betas;
+
+    %let nvars = &sqlobs;
+quit;
+
+%macro apply_frozen_model(input_ds=, output_ds=);
+
+data &output_ds.;
+    set &input_ds.;
+
+    xb = &intercept;
+
+    %do i = 1 %to &nvars;
+        xb + &&beta&i * &&var&i;
+    %end;
+
+    pd_raw = 1 / (1 + exp(-xb));
+run;
+
+%mend;
+
+%apply_frozen_model(input_ds=calib_data, output_ds=calib_data_scored);
+%apply_frozen_model(input_ds=oot_data,   output_ds=oot_data_scored);
+
+proc means data=calib_data_scored n mean std min p25 median p75 max; var pd_raw; run;
+proc means data=oot_data_scored n mean std min p25 median p75 max; var pd_raw; run;
+
+* Yearly Default rate and LRADR;
+proc sql;
+    create table calib_yearly_dr as
+    select 
+        year,
+        mean(default_flag) as yearly_dr
+    from calib_data_scored
+    group by year
+    order by year;
+quit;
+
+proc sql; select mean(yearly_dr) into :LRADR from calib_yearly_dr; quit;
+proc sql; select mean(pd_raw) into :avg_pd_calib from calib_data_scored; quit;
+
+* 
+Calibration is performed by adjusting only the intercept of the model so that the average predicted probability of default aligns with the Long-Run Average Default Rate (LRADR). 
+The calibration shift (Δ) is defined as the difference between the long-run log-odds of default and the model-implied log-odds of default, i.e., 
+
+															Δ = log(LRADR / (1 - LRADR)) − log(P̄D / (1 - P̄D)),
+
+where P̄D represents the average predicted PD over the calibration window. Economically, Δ captures whether the model is under- or over-predicting risk. If Δ > 0, the model 
+under-predicts risk and predicted PDs are shifted upward, if Δ < 0, the model over-predicts risk and PDs are shifted downward.
+
+Importantly, this is an intercept-only calibration approach. The slope coefficients remain unchanged, preserving the rank ordering of borrowers and the marginal 
+effects of risk drivers. This approach is consistent with regulatory expectations under the IRB framework, where calibration aligns the portfolio-level average PD 
+with observed long-run default experience without altering discriminatory power.
 ;
+
+data _null_;
+    LRADR  = &LRADR;
+    avg_pd = &avg_pd_calib;
+
+    delta = log(LRADR / (1 - LRADR)) 
+          - log(avg_pd / (1 - avg_pd));
+
+    call symputx("delta", delta);
+
+    put "--------------------------------------";
+    put "Intercept Shift (Delta): " delta 12.6;
+    put "--------------------------------------";
+run;
+
+data calib_data_scored;
+    set calib_data_scored;
+
+    logit_raw = log(pd_raw / (1 - pd_raw));
+    pd_calibrated = 1 / (1 + exp(-(logit_raw + &delta)));
+run;
+
+data oot_data_scored;
+    set oot_data_scored;
+
+    logit_raw = log(pd_raw / (1 - pd_raw));
+    pd_calibrated = 1 / (1 + exp(-(logit_raw + &delta)));
+run;
+
+proc sql; select mean(pd_calibrated) into :avg_pd_calibrated from calib_data_scored; quit;
+
+data _null_;
+    avg_pd_cal = &avg_pd_calibrated;
+    lradr_val  = &LRADR;
+
+    put "--------------------------------------";
+    put "Post-calibration average PD (Calibration sample): " avg_pd_cal percent8.4;
+    put "LRADR: " lradr_val percent8.4;
+    put "--------------------------------------";
+run;
+
+*
+The PD model is calibrated using an intercept-only adjustment to align portfolio-level predicted default rates with the Long-Run Average Default Rate (LRADR), estimated over 
+the 2013–2017 calibration window. The LRADR for this period is 15.12%, representing a stable long-run estimate of portfolio credit risk after smoothing cyclical fluctuations.
+
+Following the application of the calibrated intercept, the average predicted PD on the calibration sample increases from 12.44% (pre-calibration) to 14.93% (post-calibration), 
+bringing the model outputs into close alignment with the LRADR. The residual difference of approximately 19 basis points is economically immaterial and arises due to the 
+non-linear transformation between log-odds and probability space, as well as differences between population-weighted PD averages and time-averaged default rates.
+
+Importantly, the calibration is performed through an intercept-only shift, leaving all slope coefficients unchanged. As a result, the model’s rank-ordering, relative risk 
+differentiation, and discriminatory power are fully preserved. This calibration approach is consistent with IRB modelling principles and ensures portfolio-level PD alignment 
+while maintaining model stability and interpretability.;
+
+
+
+
+
+
+
+
+
+
+
+

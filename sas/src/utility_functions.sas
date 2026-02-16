@@ -477,6 +477,8 @@ run;
 
 %mend;
 
+
+*Performance Summary Gini, KS on OOT and Calibration datasets;
 %macro performance_summary(input_ds=, pd_var=, target_var=, bins=10, prefix=);
 	
 	* AUC and Gini;
@@ -577,4 +579,111 @@ run;
 
 %mend;
 
+
+* Create PD buckets using calibrated pds;
+%macro create_pd_bucket(input_ds=, output_ds=);
+
+data &output_ds.;
+    set &input_ds. (keep = pd_raw pd_calibrated);
+
+    length pd_bucket $20;
+
+    if 0 <= pd_calibrated < 0.02 then pd_bucket = "0-2%";
+    else if 0.02 <= pd_calibrated < 0.05 then pd_bucket = "2-5%";
+    else if 0.05 <= pd_calibrated < 0.10 then pd_bucket = "5-10%";
+    else if 0.10 <= pd_calibrated < 0.20 then pd_bucket = "10-20%";
+    else if 0.20 <= pd_calibrated < 0.40 then pd_bucket = "20-40%";
+    else if 0.40 <= pd_calibrated <= 1 then pd_bucket = "40%+";
+run;
+
+%mend;
+
+
+*calculate PSI and CSI;
+%macro stability_index(expected_ds=, actual_ds=, bucket_var=, prefix=);
+
+	%global &prefix._psi;
+
+    * Expected distribution;
+    proc sql; create table &prefix._exp as select &bucket_var, count(*) as exp_count from &expected_ds group by &bucket_var; quit;
+
+    * Actual distribution;
+    proc sql; create table &prefix._act as select &bucket_var, count(*) as act_count from &actual_ds group by &bucket_var; quit;
+
+    proc sql;
+        create table &prefix._psi_base as
+        select 
+            coalesce(a.&bucket_var, b.&bucket_var) as &bucket_var,
+            coalesce(exp_count, 0.000001) as exp_count,
+            coalesce(act_count, 0.000001) as act_count
+        from &prefix._exp a
+        full join &prefix._act b
+        on a.&bucket_var = b.&bucket_var;
+    quit;
+
+    proc sql; select sum(exp_count), sum(act_count) into :total_exp, :total_act from &prefix._psi_base; quit;
+
+    data &prefix._psi_calc;
+        set &prefix._psi_base;
+
+        exp_pct = exp_count / &total_exp;
+        act_pct = act_count / &total_act;
+
+        if exp_pct = 0 then exp_pct = 0.000001;
+        if act_pct = 0 then act_pct = 0.000001;
+
+        psi_component = (act_pct - exp_pct) * log(act_pct / exp_pct);
+    run;
+
+    proc sql; select sum(psi_component) into :&prefix._psi from &prefix._psi_calc; quit;
+
+%mend;
+
+%macro run_csi;
+
+    %let vars = annual_inc_bin_id_adj
+                clubbed_inq_last_6mths
+                clubbed_sub_grade
+                clubbed_verification_status
+                clubbed_home_ownership
+                dti_bin_id_adj;
+
+    %let i = 1;
+    %let var = %scan(&vars, &i);
+
+    %do %while(&var ne);
+
+        /* Dev vs OOT */
+        %stability_index(
+            expected_ds=dev_data_scored,
+            actual_ds=oot_data_scored,
+            bucket_var=&var,
+            prefix=d&i
+        );
+
+        /* Calib vs OOT */
+        %stability_index(
+            expected_ds=calib_data_scored,
+            actual_ds=oot_data_scored,
+            bucket_var=&var,
+            prefix=c&i
+        );
+
+        data temp;
+            length variable $50;
+
+            variable = "&var";
+            CSI_Dev_vs_OOT   = &&d&i._psi;
+            CSI_Calib_vs_OOT = &&c&i._psi;
+        run;
+
+        proc append base=out.csi_results data=temp force;
+        run;
+
+        %let i = %eval(&i + 1);
+        %let var = %scan(&vars, &i);
+
+    %end;
+
+%mend;
 

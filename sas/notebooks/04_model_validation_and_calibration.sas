@@ -123,22 +123,6 @@ proc sql noprint;
     %let nvars = &sqlobs;
 quit;
 
-%macro apply_frozen_model(input_ds=, output_ds=);
-
-data &output_ds.;
-    set &input_ds.;
-
-    xb = &intercept;
-
-    %do i = 1 %to &nvars;
-        xb + &&beta&i * &&var&i;
-    %end;
-
-    pd_raw = 1 / (1 + exp(-xb));
-run;
-
-%mend;
-
 %apply_frozen_model(input_ds=calib_data, output_ds=calib_data_scored);
 %apply_frozen_model(input_ds=oot_data,   output_ds=oot_data_scored);
 
@@ -225,6 +209,25 @@ Importantly, the calibration is performed through an intercept-only shift, leavi
 differentiation, and discriminatory power are fully preserved. This calibration approach is consistent with IRB modelling principles and ensures portfolio-level PD alignment 
 while maintaining model stability and interpretability.;
 
+*Sample Performance;
+
+** Calibration;
+
+%performance_summary(
+    input_ds=calib_data_scored,
+    pd_var=pd_calibrated,
+    target_var=default_flag,
+    bins=10,
+    prefix=calib
+);
+
+%performance_summary(
+    input_ds=oot_data_scored,
+    pd_var=pd_calibrated,
+    target_var=default_flag,
+    bins=10,
+    prefix=oot
+);
 
 
 

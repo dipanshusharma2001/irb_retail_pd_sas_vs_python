@@ -459,5 +459,122 @@ run;
 
 %mend;
 
+*Model Validation and Calibration;
+
+%macro apply_frozen_model(input_ds=, output_ds=);
+
+data &output_ds.;
+    set &input_ds.;
+
+    xb = &intercept;
+
+    %do i = 1 %to &nvars;
+        xb + &&beta&i * &&var&i;
+    %end;
+
+    pd_raw = 1 / (1 + exp(-xb));
+run;
+
+%mend;
+
+%macro performance_summary(input_ds=, pd_var=, target_var=, bins=10, prefix=);
+	
+	* AUC and Gini;
+	proc logistic data=&input_ds descending;
+	    model &target_var = ;  /* empty model */
+	    roc 'Score' pred=&pd_var;
+	    ods output ROCAssociation=&prefix._roc_assoc;
+	run;
+	
+	proc sql; select Area into :&prefix._auc from &prefix._roc_assoc where ROCModel = "Score"; quit;
+	%let &prefix._gini = %sysevalf(2*&&&prefix._auc - 1);
+
+    * KS Statistic;
+	data temp_&prefix._base; set &input_ds(keep=&pd_var &target_var); run;
+	proc sort data=temp_&prefix._base out=temp_&prefix._sorted; by descending &pd_var; run;
+
+    proc sql; select sum(&target_var=0), sum(&target_var=1) into :total_good, :total_bad from temp_&prefix._sorted; quit;
+
+    data &prefix._ks_calc;
+        set temp_&prefix._sorted;
+        retain cum_good cum_bad 0;
+
+        cum_good + (&target_var=0);
+        cum_bad  + (&target_var=1);
+        cum_good_pct = cum_good / &total_good;
+        cum_bad_pct  = cum_bad  / &total_bad;
+        ks = abs(cum_bad_pct - cum_good_pct);
+    run;
+
+    proc sql; select max(ks) into :&prefix._ks from &prefix._ks_calc; quit;
+
+    * Decile Summary;
+    proc rank data=temp_&prefix._base groups=&bins descending out=&prefix._ranked; var &pd_var; ranks decile; run;
+    
+    data &prefix._ranked;
+        set &prefix._ranked;
+        decile = decile + 1;
+    run;
+
+    proc sql;
+        create table &prefix._decile_summary as
+        select
+            decile,
+            count(*) as population,
+            sum(&target_var) as defaults,
+            mean(&pd_var) as avg_pd
+        from &prefix._ranked
+        group by decile
+        order by decile;
+    quit;
+
+    data &prefix._decile_summary;
+        set &prefix._decile_summary;
+        obs_default_rate = defaults / population;
+        goods = population - defaults;
+    run;
+
+    * Decile KS;
+    proc sql; select sum(goods), sum(defaults) into :total_goods, :total_bads from &prefix._decile_summary; quit;
+
+    data &prefix._decile_summary;
+        set &prefix._decile_summary;
+        retain cum_good cum_bad 0;
+
+        cum_good + goods;
+        cum_bad  + defaults;
+        cum_good_pct = cum_good / &total_goods;
+        cum_bad_pct  = cum_bad  / &total_bads;
+        ks = abs(cum_bad_pct - cum_good_pct);
+    run;
+
+    * Plot;
+    ods graphics / reset imagename="&prefix._decile_summary_plot";
+	ods listing gpath="&main_dir./sas/summaries_and_charts";
+    proc sgplot data=&prefix._decile_summary;
+        vbarparm category=decile response=obs_default_rate /
+            fillattrs=(color=lightblue);
+
+        series x=decile y=avg_pd /
+            markers lineattrs=(color=orange thickness=2);
+
+        yaxis label="Rate" valuesformat=percent8.1;
+        xaxis label="Decile";
+        title "&prefix Performance: Observed vs Predicted PD";
+    run;
+
+    data out.&prefix._performance_summary;
+        auc  = &&&prefix._auc;
+        gini = &&&prefix._gini;
+        ks   = &&&prefix._ks;
+
+        put "--------------------------------------";
+        put "&prefix AUC: " auc percent8.2;
+        put "&prefix Gini: " gini percent8.2;
+        put "&prefix KS: " ks 8.4;
+        put "--------------------------------------";
+    run;
+
+%mend;
 
 

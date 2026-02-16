@@ -395,3 +395,61 @@ data out.calib_params;
     delta        = &delta;
 run;
 
+*Final Conclusion and Fitness-for-Use Assessment
+
+The developed PD model demonstrates strong discriminatory power, stable rank ordering, and robust calibration behaviour across development, calibration, and out-of-time (OOT) 
+samples. The final six-factor specification achieves a balanced trade-off between predictive performance and economic interpretability, with no evidence of multicollinearity, 
+sign instability, or dominance by a single driver.
+
+Out-of-sample validation confirms that the model maintains consistent Gini and KS performance under a pseudo-OOT framework, while decile analyses show monotonic and intuitive 
+separation of risk. Observed differences in absolute default rates between calibration and OOT samples are driven by genuine portfolio and cycle effects, rather than model weakness, 
+and are appropriately reflected in the PD distribution shifts.
+
+Calibration at the portfolio level was successfully performed using an intercept-only adjustment, aligning the average predicted PD to the long-run average default rate (LRADR) 
+estimated over a five-year window. Post-calibration diagnostics confirm close alignment in the calibration sample, while conservative over-prediction in the OOT period is consistent 
+with a lower-risk credit environment and is considered acceptable from a prudential perspective.
+
+Stability diagnostics further support the model’s robustness. Population Stability Index (PSI) values for calibrated PDs remain well below supervisory concern thresholds, and 
+Characteristic Stability Indices (CSI) for all final drivers indicate no material shifts in underlying borrower characteristics. Where minor shifts are observed, they are economically 
+intuitive and aligned with improving credit quality trends.
+
+
+Model Limitations
+
+- The model is developed using a snapshot dataset, with limited explicit macroeconomic conditioning.
+- The OOT assessment is pseudo-out-of-time, as the full dataset was available during development.
+- Calibration reflects historical averages and does not incorporate forward-looking stress adjustments.
+- Data availability prior to 2012 is limited, constraining the use of longer historical cycles.
+
+These limitations are explicitly acknowledged and do not detract from the model’s intended use.
+
+
+Model Monitoring Framework (High Level)
+
+In production, the following indicators should be monitored regularly:
+
+- Discrimination: Gini and KS drift
+- Calibration: Portfolio default rate vs average predicted PD
+- Stability: PSI on PDs and CSI on key drivers
+- Frequency: At least annually, with enhanced monitoring during periods of portfolio stress
+
+Thresholds should be aligned with internal model risk standards and regulatory guidance.
+
+
+Fitness-for-Use Statement
+
+The model is considered fit for use for:
+
+- Retail mortgage PD estimation under an IRB framework
+- Risk ranking, capital calculation, and portfolio monitoring
+- Use in stable macroeconomic environments with standard monitoring overlays
+
+
+The model is not intended for:
+
+- Point-in-time default forecasting
+- Stress testing without external macroeconomic adjustments
+- Use outside the defined portfolio and data scope
+;
+
+
